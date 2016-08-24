@@ -1,0 +1,122 @@
+Sub Auto_Open()
+Dim LastWks As Worksheet
+
+    'stops an Excel update to speed up makro excecution time (results in faster macro execution)
+    Application.ScreenUpdating = False
+    
+    'remember the actual selected worksheet
+    Set LastWks = Worksheets(ActiveSheet.Name)
+    
+    'reads the actual config macro file
+    Call CONFIG
+
+    'create buttons and user info in second line
+    MainWS.Select
+    Call CREATE_BUTTONS
+    
+    'event-handler for double click detection
+    Call DOUBLE_CLICK_EVENT
+    ActiveSheet.Cells(StartingRow, 1).Select
+    
+    LastWks.Activate
+    
+    'activates Excel update functions
+    Application.ScreenUpdating = True
+    Application.DisplayStatusBar = True
+    
+End Sub
+
+
+'clear previous content
+Sub ClearSheet()
+
+    Set myActiveCell = ActiveCell
+    
+    'delete all shapes (any object)
+    ActiveSheet.DrawingObjects.Delete
+
+    'restores buttons
+    If ActiveSheet.Name = MainWS.Name Then
+        Call Auto_Open
+    End If
+
+'    'delete defined names
+'    Dim xName As Name
+'    For Each xName In ActiveWorkbook.Names
+'        If InStr(1, xName, ActiveSheet.Name) Then
+'            xName.Delete
+'        End If
+'    Next xName
+
+    'clears first assigend cell calling the function
+    firstCell = False
+    
+    myActiveCell.Activate
+End Sub
+
+
+'create buttons and user info in second line
+Sub CREATE_BUTTONS()
+    'last editor and change date
+    'MainWS.Select
+    Range("C2").Value = Application.UserName
+    Range("C2").HorizontalAlignment = xlLeft
+    Range("C2").Font.Bold = True
+    Range("C2").Font.Size = 12
+    Range("D2").Value = Strings.Format(Now, "DD.MM.YYYY") & " um " & Strings.Format(Now, "hh:mm") & " Uhr"
+    Range("D2").HorizontalAlignment = xlLeft
+    Range("D2").Font.Bold = True
+    Range("D2").Font.Size = 12
+
+    'button 1 - start edit mode that deactivates the double click event and allows to edit the cell on double click instead
+    'MainWS.Select
+    ActiveSheet.Buttons.Add(ActiveSheet.Cells(2, 1).Left, ActiveSheet.Cells(2, 1).Top, ActiveSheet.Cells(2, 1).Width, ActiveSheet.Cells(2, 1).Height).Select
+    Selection.OnAction = "MODE_EDIT"
+    Selection.Characters.Text = "start EDIT mode"
+
+    'button 2
+    'MainWS.Select
+    ActiveSheet.Buttons.Add(ActiveSheet.Cells(2, 2).Left, ActiveSheet.Cells(2, 2).Top, ActiveSheet.Cells(2, 2).Width, ActiveSheet.Cells(2, 2).Height).Select
+    Selection.OnAction = "" 'assign your macro here (I splitted the huge main worksheet in new and smaller sheets)
+    Selection.Characters.Text = "assign any macro" 'change the text to whatever you like
+End Sub
+
+
+'event for double click detection
+Private Sub DOUBLE_CLICK_EVENT()
+    'Application.DisplayStatusBar = True
+    'Application.StatusBar = "Please be patient..."
+    Application.OnDoubleClick = "CREATE_CHART"
+    'Application.OnDoubleClick = ""
+End Sub
+
+
+'removes the double click detection
+Private Sub MODE_EDIT()
+    'stops any Excel update to speed up makro excecution time (results in faster macro execution)
+    Application.ScreenUpdating = False
+    
+    'resets double click to usual behavior (edit marked cell)
+    Application.OnDoubleClick = ""
+    
+    'delete all shapes
+    If DeleteAllObjects Then
+        ActiveSheet.DrawingObjects.Delete
+    End If
+    
+    'button 1
+    MainWS.Select
+    ActiveSheet.Buttons.Add(ActiveSheet.Cells(2, 1).Left, ActiveSheet.Cells(2, 1).Top, ActiveSheet.Cells(2, 1).Width, ActiveSheet.Cells(2, 1).Height).Select
+    Selection.OnAction = "Auto_Open"
+    Selection.Characters.Text = "exit EDIT mode"
+    
+    'button 2
+    ActiveSheet.Buttons.Add(ActiveSheet.Cells(2, 2).Left, ActiveSheet.Cells(2, 2).Top, ActiveSheet.Cells(2, 2).Width, ActiveSheet.Cells(2, 2).Height).Select
+    Selection.OnAction = "" 'assign your macro here (I used an automated test macro here)
+    Selection.Characters.Text = "assign any macro" 'change the text to whatever you like
+    
+    ActiveSheet.Cells(StartingRow, 1).Select
+    
+    'activates Excel update functions
+    Application.ScreenUpdating = True
+End Sub
