@@ -1,0 +1,93 @@
+Public MainWS As Worksheet 'defines the worksheet that is affected by the macro
+Public ElementColumnAdr As Integer 'numeric address of the element column
+Public ElementSearchString As String 'string to search for the 'ElementColumnAdr'
+Public DependencyColumnAdr As Integer 'column address number of the dependency column
+Public DependencySearchString As String 'string to search for the 'DependencyColumnAdr'
+Public SectionColumnAdr As Integer 'column address number of the section column
+Public SectionSearchString As String 'string to search for the 'SectionColumnAdr'
+Public LinkColumnAdr As Integer 'is used to hyperlink the central element to somewhere
+Public LinkSearchString As String 'string to search for the 'LinkColumnAdr'
+Public DeleteAllObjects As Boolean 'if set to TRUE, the macro deletes all previous content, when creating a new chart (doesnt effect the 'clear chart' button)
+Public LastRow As Integer 'dimension of the element column till its last entry (=number of rows in table)
+Public StartingRow As Integer 'first row that is processed by the macro (for ignoring the buttons and any headers)
+Public DebugHandler As Integer 'set this to change the behavior of the macro in case a key column couldnt be found (DEBUG purpose)
+Public StringDelimiter As String 'delimiter for key columns (is NOT allowed to be contained by any section OR element string)
+Public FontSizeMax As Integer 'maximum text size in displayed shapes
+Public ActivateLinkBuilding As Boolean 'activates the link building for the central shape
+Public LinkPrequel As String 'set this in front of the content in the link column
+Public LinkSequel As String 'put this after the content in the link column
+
+
+
+'#------------------------------------
+'# Config File
+'#------------------------------------
+Sub CONFIG()
+'# Debug
+'# Set this to change the behavior of the macro in case an error occures. (for DEBUG)
+DebugHandler = 1 '[0] just continue (ignore); [1] show warnings (notice); [2] show warning and also terminate macro execution (react) in case its a critical error (would probably else result in a vba crash)
+
+
+
+'# Main Sheet Name
+'# Use this variable to define the worksheet that is affected by the macro
+'Set MainWS = Worksheets("Demo") '# Please enter one of your worksheets within the "" as reference ...
+Set MainWS = Worksheets(ActiveSheet.Name) '# ... OR use Worksheets(ActiveSheet.Name) in case you want to always run the macro on the selected worksheet
+
+
+'# Processed Rows
+'# dimension of the table (=index of the last row); If set to '0' the macro will try to determine the last row of the element column (other columns may have different dimensions)
+LastRow = 0 '# indicates the last row that will be processed by the macro
+'# first processed row (for not processing the header or the buttons)
+'StartingRow = 3 '# fix starting row ...
+'# ... or start depending on worksheet name (or any other property)
+    Select Case MainWS.Name
+        Case "Demo" '# this is the worksheet with the buttons so the Starting row is incremented
+            StartingRow = 3
+        Case "any" '# any other worksheet you want to add exceptions for
+            'StartingRow = 2
+        Case Else
+            StartingRow = 2 '# you may not have buttons in the second row but probably headers in the first
+    End Select
+        
+
+'# Delimiter for key columns (is NOT allowed to be contained by any section OR element string)
+'# NOTICE: The delimiter can be put in front of a dependency string to link it to another section; (e.g. for '$' as a delimiter: section$dependency)
+StringDelimiter = "$"
+
+'# Maximum Text Size in Shapes (is automatically reduced if letters would else be hidden)
+FontSizeMax = 25
+
+
+'# Processed Columns
+'# Set the column addresses to the one you need. If set to '0' the macro will use the 'SearchString' to get the appropriate column [in the first row] that SOMEHOW CONTAINS that string (may result in an error if search fails)
+SectionColumnAdr = 0 '# (e.g. column "A" = 1, column "B" = 2 ...);
+SectionSearchString = "section" '# only considered if 'SectionColumnAdr' is not set or equal to '0'
+ElementColumnAdr = 0 '# (e.g. column "A" = 1, column "B" = 2 ...);
+ElementSearchString = "element" '# only considered if 'ElementColumnAdr' is not set or equal to '0'
+DependencyColumnAdr = 0 '# (e.g. column "A" = 1, column "B" = 2 ...);
+DependencySearchString = "dependency" '# only considered if 'DependencyColumnAdr' is not set or equal to '0'
+LinkColumnAdr = 0 '# (e.g. column "A" = 1, column "B" = 2 ...);
+LinkSearchString = "link" '# only considered if 'LinkColumnAdr' is not set or equal to '0'
+
+
+'# Build a hyperlink by adding fix parts to the content in link column, like: prequel + LINK + sequel
+ActivateLinkBuilding = False '# set TRUE if you want to activate the link building (shortens content in link column but only works with FIX link structure
+LinkPrequel = "" '# set this in front of the content in link column
+LinkSequel = "" '# put this after the content in link column
+
+
+'# Delete all previous objects when creating a new chart [like shapes or buttons]
+DeleteAllObjects = True
+
+
+'# Maximize Excel window for better view
+MaximizeOn = True '# it is NOT recommended deactivating this (I have never tried non maximized window sizes)
+
+
+
+
+
+
+
+End Sub
