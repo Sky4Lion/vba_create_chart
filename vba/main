@@ -1,0 +1,989 @@
+Dim CellArray() As String 'contains the combination of section and element of each row
+Dim firstCellName As String 'saves the element that called the function the first time (will be highlighted in green); is cleared when chart is deleted
+Public firstCell As Boolean 'TRUE, if firstCellName is assigned; False in any other case (e.g. Init or after a reset)
+Public LastColor As Long 'saves the color of the last marked arrow (is then painted in black)
+Public LastArrowGroup As String 'saves the ID of the marked arrow (used to restore the original color)
+Dim CellNameShapeCount As Integer 'ID of the central shape; is used as a reference for all following shape elements
+
+
+
+
+Sub CREATE_CHART()
+
+'stop any Excel update to speed up macro execution time
+Application.Calculation = xlCalculationManual
+Application.ScreenUpdating = False
+'Application.DisplayStatusBar = True
+Application.EnableEvents = False
+ActiveSheet.DisplayPageBreaks = False
+
+
+    
+'apply the actual CONFIG macro file
+Call CONFIG
+
+'activate and select the intended workbook (see CONFIG)
+MainWS.Activate
+
+'exit the macro if the selected line is above the starting line
+If Selection.Row < StartingRow Then
+    If DebugHandler > 0 Then MsgBox ("The selected row is above the starting row 'StartingRow' (see CONFIG). 'Notice 105'")
+    If DebugHandler > 1 Then Exit Sub
+End If
+
+'delete all previous objects if configured (see CONFIG)
+If DeleteAllObjects Then
+    ActiveSheet.DrawingObjects.Delete 'deletes all extra content of the worksheet (shapes, buttons, ...; includes everything within the "Edit" ribbon)
+End If
+
+
+
+
+'-------------------------------------------------
+' Initialization
+'-------------------------------------------------
+Set myActiveCell = ActiveCell 'remember the actual location BEFORE executing the macro
+'Set myActiveWorksheet = ActiveSheet 'only needed if the macro changes the worksheet
+'Set myActiveWorkbook = ActiveWorkbook 'only needed if the macro changes the workbook
+
+
+    'search for the proper column address numbers if not already set by the CONFIG
+    For i = 1 To ActiveSheet.Cells(1, 512).End(xlToLeft).Column
+        If SectionColumnAdr = 0 Then
+            If InStr(Cells(1, i).Value, SectionSearchString) <> 0 Then SectionColumnAdr = i
+        End If
+        If ElementColumnAdr = 0 Then
+            If InStr(Cells(1, i).Value, ElementSearchString) <> 0 Then ElementColumnAdr = i
+        End If
+        If DependencyColumnAdr = 0 Then
+            If InStr(Cells(1, i).Value, DependencySearchString) <> 0 Then DependencyColumnAdr = i
+        End If
+        If LinkColumnAdr = 0 Then
+            If InStr(Cells(1, i).Value, LinkSearchString) <> 0 Then LinkColumnAdr = i
+        End If
+    Next i
+    
+    
+    'show a warning, if a column couldnt be found (macro can terminate the execution by 'Exit Sub')
+    If DebugHandler > 0 Then
+        If SectionColumnAdr = 0 Then
+            MsgBox ("The column '" & SectionSearchString & "' could not be found. Please adjust the macro! 'Error 100'")
+            If DebugHandler > 1 Then Exit Sub
+        End If
+        If ElementColumnAdr = 0 Then
+            MsgBox ("The column '" & ElementSearchString & "' could not be found. Please adjust the macro! 'Error 101'")
+            If DebugHandler > 1 Then Exit Sub
+        End If
+        If DependencyColumnAdr = 0 Then
+            MsgBox ("The column '" & DependencySearchString & "' could not be found. Please adjust the macro! 'Error 102'")
+            If DebugHandler > 1 Then Exit Sub
+        End If
+        If LinkColumnAdr = 0 Then
+            MsgBox ("Warning: The column '" & LinkSearchString & "' could not be found. You might adjust the macro. 'Notice 103'")
+        End If
+    End If
+
+
+    'determine the extent of the table (number of rows)
+    If LastRow = 0 Then 'True if NOT set by CONFIG
+        LastRow = ActiveSheet.Cells(Rows.Count, ElementColumnAdr).End(xlUp).Row 'fast gets the last row that is modified
+        While IsEmpty(ActiveSheet.Cells(LastRow, ElementColumnAdr))
+            LastRow = LastRow - 1 'remove the empty rows at the end
+        Wend
+    End If
+    
+    
+    'exit the macro if the selected line is below the ending line
+    If Selection.Row > LastRow Then
+        If DebugHandler > 0 Then MsgBox ("The selected row is below the last row 'LastRow'. 'Notice 106'")
+        If DebugHandler > 1 Then Exit Sub
+    End If
+    
+    
+    'remember the element-key at macro start to highlight this element (resetted by clearing the chart)
+    Dim CellName As String 'key-string of the element at macro startup (section + delimiter + element)
+    Dim CellNameRow As Integer 'row index of the 'CellName' variable
+    CellName = ActiveSheet.Cells(ActiveCell.Row, SectionColumnAdr).Text & StringDelimiter & ActiveSheet.Cells(ActiveCell.Row, ElementColumnAdr).Text
+    CellNameRow = ActiveCell.Row
+    If firstCell = False Then 'remember the element, when the macro was called frist or after a reset
+        firstCellName = CellName 'remember the cell key string at first macro startup
+        firstCell = True 'TRUE, if first cell already set
+    End If
+    
+    
+    'check for if the delimiter is contained by the section or the element column items
+    If DebugHandler > 0 Then
+        For i = StartingRow To LastRow
+            If InStr(Cells(i, SectionColumnAdr).Value, StringDelimiter) <> 0 Then
+                MsgBox ("The forbidden StringDelimiter '" & StringDelimiter & "' (see CONFIG macro) is used in Row " & i & " of the " & SectionSearchString & " column.")
+                If DebugHandler > 1 Then Exit Sub
+            End If
+            If InStr(Cells(i, ElementColumnAdr).Value, StringDelimiter) <> 0 Then
+                MsgBox ("The forbidden StringDelimiter '" & StringDelimiter & "' (see CONFIG macro) is used in Row " & i & " of the " & ElementSearchString & " column.")
+                If DebugHandler > 1 Then Exit Sub
+            End If
+        Next i
+    End If
+    
+    
+    'restore buttons and update user info in the second line
+    Call CREATE_BUTTONS
+
+
+
+
+'-------------------------------------------------
+' Import the data of the key columns
+'-------------------------------------------------
+    'Dim CellArray() As String 'already globally assigned; contains all key strings (array of all 'CellName')
+    Dim SectionArray() As String 'contains all section names
+    Dim ElementArray() As String 'contains all element names
+    ReDim Preserve CellArray(LastRow + 1) 'Resize arrays to correct array size
+    ReDim Preserve SectionArray(LastRow + 1)
+    ReDim Preserve ElementArray(LastRow + 1)
+
+
+    For i = StartingRow To LastRow
+        'check for cell content and save imported data in RAM
+        If Not (IsEmpty(ActiveSheet.Cells(i, SectionColumnAdr))) Then    'TRUE if cell content was found
+            SectionArray(i) = ActiveSheet.Cells(i, SectionColumnAdr).Text
+        
+            If Not (IsEmpty(ActiveSheet.Cells(i, ElementColumnAdr))) Then    'TRUE if cell content was found
+                ElementArray(i) = ActiveSheet.Cells(i, ElementColumnAdr).Text
+                CellArray(i) = SectionArray(i) & StringDelimiter & ElementArray(i) 'CellArray is only set if section AND element are NOT empty
+            End If
+        End If
+    Next i
+
+
+
+
+'-------------------------------------------------
+' Search for any backward or forward dependencies
+'-------------------------------------------------
+Dim BackwardArray() As String 'contains all Backward elements (shown left of zentral one); array is sorted according to row number of entries and entries, that are also in the Forward array, are removed
+Dim BackwardArrayRow() As Integer 'contains the row index of every Backward element
+Dim BackwardArraySize As Integer 'shows the index size of the BackwardArray; the init value is '-1'; it is incremented for every entry so '0' is the first array element
+Dim BackBackArray() As String 'contains the Backward elements of every Backward element in a consecutively array. it is therefore called the BackBackward array
+Dim BackBackArrayRow() As Integer 'contains the row index of the CellArray element refering to this BackBackward element
+Dim BackBackArrayReference() As Integer 'contains the array index of the BackwardArray element refering to this BackBackward element
+Dim BackBackArraySize As Integer 'shows the index size of the BackBackArray; the init value is '-1'; it is incremented for every entry so '0' is the first array element
+Dim ForwardArray() As String 'contains all Forward elements (shown right of the central one); array is not further processed or sorted
+Dim ForwardArrayRow() As Integer 'contains the row index of every Forward element
+Dim ForwardArraySize As Integer 'shows the index size of the ForwardArray; the init value is '-1'; it is incremented for every entry so '0' is the first array element
+Dim ForwardDirect() As Integer 'is a subset of the ForwardArray with elements that are both: Forward AND Backward elements; these elements are removed from the BackwardArray; arrows are routed directly to the central chart shape
+Dim ForwardDirectSize As Integer 'shows the index size of the ForwardDirect; the init value is '-1'; it is incremented for every entry so '0' is the first array element
+Dim splitVals() As Variant 'splits the content of the dependency column for every NewLineBreak = Chr(10); every array item contains one line of this dependency cell
+Dim totalvals As Integer 'size of the splitVals array
+Dim splitValtemp As Variant 'a temporary storage for every splitVals entry; in this array empty entries are removed and finally saved into the splitVals array
+Dim totalvaltemp As Integer 'size of the splitValtemp array
+Dim nam As String 'temporary storage for a string comparison with the CellName variable
+
+    'set inital value
+    BackwardArraySize = -1
+    BackBackArraySize = -1
+    ForwardArraySize = -1
+    ForwardDirectSize = -1
+    
+
+
+    For i = StartingRow To LastRow
+
+        If Not (ActiveSheet.Cells(i, DependencyColumnAdr) = "") Then    'TRUE if not empty string
+
+            'split the dependency's cell content at newLine = Chr(10)
+            splitValtemp = Split(ActiveSheet.Cells(i, DependencyColumnAdr).Value, Chr(10))
+            totalvaltemp = UBound(splitValtemp)
+            totalvals = -1
+            
+
+            'remove empty lines from array and save the result consecutively in splitVals
+            For k = 0 To totalvaltemp
+                If Not (splitValtemp(k) = "") Then
+                    totalvals = totalvals + 1
+                    ReDim Preserve splitVals(totalvals + 1)
+                    splitVals(totalvals) = splitValtemp(k)
+                End If
+            Next k
+
+
+            'build the Backward array for the dependencies
+            If i = CellNameRow Then
+                ReDim Preserve BackwardArray(totalvals + 1)
+                ReDim Preserve BackwardArrayRow(totalvals + 1)
+                BackwardArraySize = totalvals 'remember: if there is only one splitVals item -> totalVals == 0
+
+                'build the BackwardArray and assign the row index to the found Backward elements; the first hit is assigned, thats why the combination of section and element must be unique
+                For n = 0 To totalvals
+                    If InStr(splitVals(n), SectionSearchString) <> 0 Then 'True if dependency has a different section than the actual processed element
+                        BackwardArray(n) = splitVals(n)
+                    Else
+                        BackwardArray(n) = SectionArray(i) & StringDelimiter & splitVals(n)
+                    End If
+                    For m = StartingRow To LastRow
+                        If BackwardArray(n) = CellArray(m) Then
+                            BackwardArrayRow(n) = m
+                            Exit For
+                        End If
+                    Next m
+                Next n
+            End If
+
+
+            'search for forward dependencies
+            For n = 0 To totalvals
+                If InStr(splitVals(n), SectionSearchString) <> 0 Then 'True if dependency has a different section than the actual processed element
+                    nam = splitVals(n)
+                Else
+                    nam = SectionArray(i) & StringDelimiter & splitVals(n)
+                End If
+                If nam = CellName Then
+                    ForwardArraySize = ForwardArraySize + 1
+                    ReDim Preserve ForwardArray(ForwardArraySize + 1)
+                    ReDim Preserve ForwardArrayRow(ForwardArraySize + 1)
+
+                    ForwardArray(ForwardArraySize) = CellArray(i)
+                    ForwardArrayRow(ForwardArraySize) = i
+                End If
+            Next n
+
+        End If
+    Next i
+    
+
+    'compare the ForwardArray and the BackwardArray and remove equal entries from the BackwardArray; the removed entry will be depicted by an arrow from the Forward element to the central one
+    For i = 0 To ForwardArraySize
+        For j = 0 To BackwardArraySize
+
+            If ForwardArray(i) = BackwardArray(j) Then 'element is in both arrays
+
+                ForwardDirectSize = ForwardDirectSize + 1
+                ReDim Preserve ForwardDirect(ForwardDirectSize + 1)
+
+                ForwardDirect(ForwardDirectSize) = i
+
+                'delete the entry from BackwardArray and reduce the array size
+                For k = j + 1 To BackwardArraySize
+                    BackwardArray(k - 1) = BackwardArray(k)
+                    BackwardArrayRow(k - 1) = BackwardArrayRow(k)
+                Next k
+                ReDim Preserve BackwardArray(BackwardArraySize)
+                ReDim Preserve BackwardArrayRow(BackwardArraySize)
+                BackwardArraySize = BackwardArraySize - 1
+
+            End If
+        Next j
+    Next i
+
+    
+'-------------------------------------------------
+' Create the BackBackwardArray
+'-------------------------------------------------
+    'search for backward elements of the BackwardArray; therefore the results are double backward elements -> BackBackwardArray
+    '[basically repeats the BackwardArray search (see above) for every BackwardArray element]
+    If BackwardArraySize >= 0 Then 'TRUE, if there is at least one Backward element (prevent an vba crash)
+
+        If BackwardArraySize > 0 Then 'there is more than one array element
+            'sort the BackwardArray for ascending BackwardArrayRow indexes (heavily decreases loop time)
+            For j = BackwardArraySize - 1 To 0 Step -1 'BubbleSort-algorithm
+                For i = LBound(BackwardArray) To j
+                    If ((BackwardArrayRow(i) > BackwardArrayRow(i + 1)) And Not (BackwardArrayRow(i + 1) = 0)) Or (BackwardArrayRow(i) = 0) Then
+                        'row indexes ...
+                        aTemp = BackwardArrayRow(i)
+                        BackwardArrayRow(i) = BackwardArrayRow(i + 1)
+                        BackwardArrayRow(i + 1) = aTemp
+                        ' ... and array content sorted
+                        aTemp = BackwardArray(i)
+                        BackwardArray(i) = BackwardArray(i + 1)
+                        BackwardArray(i + 1) = aTemp
+                    End If
+    
+                Next i
+            Next j
+        End If
+        
+        
+        'get the BackBackwardArray entries
+        n = 0
+        For i = StartingRow To LastRow
+            If i = BackwardArrayRow(n) Then
+                If Not (ActiveSheet.Cells(i, DependencyColumnAdr) = "") Then    'TRUE if string is NOT empty
+                
+                    'split the dependency's cell content at newLine = Chr(10)
+                    splitValtemp = Split(ActiveSheet.Cells(i, DependencyColumnAdr).Value, Chr(10))
+                    totalvaltemp = UBound(splitValtemp)
+                    totalvals = -1
+
+    
+                    'remove empty lines
+                    For k = 0 To totalvaltemp
+                        If Not (splitValtemp(k) = "") Then
+                            If BackBackArraySize < 0 Then BackBackArraySize = 0 'needed during first turn to prevent a vba crash
+                        
+                            totalvals = totalvals + 1
+                            ReDim Preserve splitVals(totalvals + 1)
+                            splitVals(totalvals) = splitValtemp(k)
+                        End If
+                    Next k
+    
+                    
+                    ReDim Preserve BackBackArray(BackBackArraySize + totalvals + 1)
+                    ReDim Preserve BackBackArrayRow(BackBackArraySize + totalvals + 1)
+                    ReDim Preserve BackBackArrayReference(BackBackArraySize + totalvals + 1)
+    
+                    'store the found elements
+                    For j = 0 To totalvals
+                        If InStr(splitVals(j), SectionSearchString) <> 0 Then 'True if dependency has a different section than the actual processed element
+                            BackBackArray(BackBackArraySize + j) = splitVals(j)
+                        Else
+                            BackBackArray(BackBackArraySize + j) = SectionArray(i) & StringDelimiter & splitVals(j)
+                        End If
+                        BackBackArrayReference(BackBackArraySize + j) = n
+    
+                        'assign the row index number to the found elements
+                        For m = StartingRow To LastRow
+                            If BackBackArray(BackBackArraySize + j) = CellArray(m) Then
+                                BackBackArrayRow(n) = m
+                                Exit For
+                            End If
+                        Next m
+                    Next j
+                    BackBackArraySize = BackBackArraySize + totalvals
+    
+                    n = n + 1
+                    i = i - 1 'repeat the turn in case the same element occurs multiple times (prevent inconsistent array sizes)
+                    If n > BackwardArraySize Then Exit For 'prevent an vba crash due to an invalid memory access in some cases
+                    
+                End If
+            End If
+        Next i
+            
+    End If
+
+
+
+
+'-------------------------------------------------
+' Create the shapes
+'-------------------------------------------------
+If MaximizeOn Then Application.WindowState = xlMaximized 'maximize the Excel Window
+
+Dim L As Single, T As Single, W As Single, H As Single 'temporary storages for Left, Top, Width and Height information
+Dim CenterLeft As Single 'distance from the left of the table (column A) to the left side of the central shape
+Dim CenterTop As Single 'distance from the top of the table (line 1) to the upper edge of the central shape
+Dim ShapeWidth As Single 'standard width of a shape; valid for all shapes
+Dim ShapeHeight As Single 'standard height of a shape; not necessarily the same for all shapes as it is dependant on content height
+Dim ArrowStartShape As Single 'indicates the table width to the right edge of the Forward shapes (= beginning of every arrow)
+Dim ArrowEndShape As Single 'indicates the table width to the left edge of the Backward shapes (= ending of arrows that end at a Backward Shape)
+Dim ArrowMaxHeight As Single 'maximum height, while the arrows are still on top of the background (and thus within the visible window)
+Dim ArrowMaxWidth As Single 'maximum width, while the arrows are still on top of the background (and thus within the visible window)
+
+    
+    '-------------------------------------------------
+    'Semi-transparent background shape
+    '-------------------------------------------------
+    L = ActiveSheet.Cells(ActiveWindow.VisibleRange.Row, ActiveWindow.VisibleRange.Column).Left + (2 * ActiveWindow.UsableWidth / ActiveWindow.Zoom)
+    T = ActiveSheet.Cells(ActiveWindow.VisibleRange.Row, ActiveWindow.VisibleRange.Column).Top
+    W = 94 * ActiveWindow.UsableWidth / ActiveWindow.Zoom
+    H = 100 * ActiveWindow.UsableHeight / ActiveWindow.Zoom - ActiveSheet.Cells(2, 1).Top - 15
+    ArrowMaxHeight = T + H
+    ArrowMaxWidth = L + W
+    
+    'create the background shape (slightly transparent white surface)
+    ActiveSheet.Shapes.AddShape(msoShapeRectangle, L, T, W, H).Select
+    With Selection.ShapeRange.Fill
+        .ForeColor.ObjectThemeColor = msoThemeColorBackground1 '(for the white color)
+        .Transparency = 0.2 'transparency (20% means only slight transparency)
+    End With
+    Selection.ShapeRange.Line.Visible = msoFalse 'hide the border line (would else have to be configured too)
+
+
+    '-------------------------------------------------
+    'Determine the standard shape dimensions
+    '-------------------------------------------------
+    CenterLeft = ActiveSheet.Cells(ActiveWindow.VisibleRange.Row, ActiveWindow.VisibleRange.Column).Left + (49 * ActiveWindow.UsableWidth / ActiveWindow.Zoom)
+    CenterTop = ActiveSheet.Cells(ActiveWindow.VisibleRange.Row, ActiveWindow.VisibleRange.Column).Top + (48 * ActiveWindow.UsableHeight / ActiveWindow.Zoom)
+    'ShapeWidth = 0.2 * ActiveWindow.UsableWidth 'zoom set in Excel would greatly affect the shape dimensions
+    ShapeWidth = 21 * ActiveWindow.UsableWidth / ActiveWindow.Zoom 'zoom set in Excel only slightly affects the shape dimensions
+    ShapeHeight = ShapeWidth * 0.28
+    '-------------------------------------------------
+    'Reduce the standard shape dimensions when exceeding the visible screen borders
+    '-------------------------------------------------
+    If ((BackwardArraySize + 2) * ShapeHeight * 1.2 > H) Or ((ForwardArraySize + 2) * ShapeHeight * 1.2 > H) Then
+        ShapeHeight = H / 1.2 / (Application.WorksheetFunction.Max(BackwardArraySize, ForwardArraySize) + 2)
+    End If
+    If (4 * ShapeWidth) > W Then
+        ShapeWidth = W / 4
+    End If
+    If (Application.WorksheetFunction.Max(BackwardArraySize, ForwardArraySize) Mod 2 = 0) Then
+        CenterTop = CenterTop - (1.25 * ShapeHeight) 'better approximation for the visible center
+    Else
+        CenterTop = CenterTop - (1.75 * ShapeHeight) 'shifting the center, resulting in more space for arrows
+    End If
+
+
+    '-------------------------------------------------
+    'Clear chart shape
+    '-------------------------------------------------
+    L = CenterLeft - (0.7 * 0.5 * ShapeWidth)
+    T = CenterTop - (0.7 * 40 * ActiveWindow.UsableHeight / ActiveWindow.Zoom)
+    W = 0.7 * ShapeWidth
+    H = 0.8 * ShapeHeight
+    If T < ActiveSheet.Cells(ActiveWindow.VisibleRange.Row, ActiveWindow.VisibleRange.Column).Top Then T = ActiveSheet.Cells(ActiveWindow.VisibleRange.Row, ActiveWindow.VisibleRange.Column).Top + 15 'enlarge the shape, if it has been reduced by the automatic adjustment
+        
+    ActiveSheet.Shapes.AddShape(msoShapeRoundedRectangle, L, T, W, H).Select
+    Selection.ShapeRange.Fill.ForeColor.RGB = RGB(67, 76, 83) 'color of the shape (~grey)
+    With Selection.ShapeRange.TextFrame2
+        .TextRange.Characters.Text = "clear chart" 'text shown in shape
+        .VerticalAnchor = msoAnchorMiddle 'text alignment vertically
+        .TextRange.ParagraphFormat.Alignment = msoAlignCenter 'text alignment horizontally
+        '.TextRange.Font.Size = FontSizeMax * 0.66 'maximum text size
+        .WordWrap = True 'allow automatic line breaks (else some letters could be hidden)
+        .TextRange.Font.Fill.ForeColor.ObjectThemeColor = msoThemeColorBackground1 'text color
+        .AutoSize = msoAutoSizeShapeToFitText 'the shape size can be adapted to suit the text -> optimal view
+    End With
+    While ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height > H
+        Selection.ShapeRange.TextFrame2.TextRange.Font.Size = Selection.ShapeRange.TextFrame2.TextRange.Font.Size - 1 'reduce the letter size till the shape size (that is automatically adapted by Excel) fits the maximum allowed shape dimensions
+    Wend
+    Selection.ShapeRange.Line.Visible = msoFalse 'hide the border line (would else have to be configured too)
+    Selection.OnAction = "'" & ActiveWorkbook.Name & "'!ClearSheet" 'on click action calls the macro when clicked by user
+
+    
+    '-------------------------------------------------
+    'Central shape
+    '-------------------------------------------------
+    L = CenterLeft - (0.5 * ShapeWidth)
+    T = CenterTop
+    W = ShapeWidth
+    H = ShapeHeight
+    
+    ActiveSheet.Shapes.AddShape(msoShapeRoundedRectangle, L, T, W, H).Select
+    Selection.ShapeRange.Line.Visible = msoFalse
+    Selection.ShapeRange.Fill.ForeColor.RGB = RGB(0, 112, 192) 'color of the shape (~close to royal blue)
+    With Selection.ShapeRange.TextFrame2
+        .TextRange.Characters.Text = Replace(CellName, StringDelimiter, Chr(10))
+        .TextRange.Font.Size = FontSizeMax
+        .VerticalAnchor = msoAnchorMiddle
+        .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+        .WordWrap = True
+        .TextRange.Font.Fill.ForeColor.ObjectThemeColor = msoThemeColorBackground1
+        .AutoSize = msoAutoSizeShapeToFitText
+    End With
+    While ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height > H
+        Selection.ShapeRange.TextFrame2.TextRange.Font.Size = Selection.ShapeRange.TextFrame2.TextRange.Font.Size - 1
+    Wend
+    If ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height < H Then
+        ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Top = ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Top - ((H - ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height) * 0.5)
+        ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height = H
+    End If
+    If firstCellName = CellName Then Selection.ShapeRange.Fill.ForeColor.RGB = RGB(25, 167, 28) 'if shape name equals firstCellName, the shape is painted green
+    'assign a link
+    Dim Link As String
+    Link = ActiveSheet.Cells(CellNameRow, LinkColumnAdr).Text
+    If Not Link = "" Then
+        If ActivateLinkBuilding Then
+        'If IsNumeric(Link) Then 'an alternative option
+            ActiveSheet.Hyperlinks.Add Anchor:=Selection.ShapeRange.Item(1), Address:=LinkPrequel & ActiveSheet.Cells(CellNameRow, LinkColumnAdr).Text & LinkSequel
+        Else
+            ActiveSheet.Hyperlinks.Add Anchor:=Selection.ShapeRange.Item(1), Address:=ActiveSheet.Cells(CellNameRow, LinkColumnAdr).Text
+        End If
+    Else
+        If DebugHandler > 0 Then
+            Selection.OnAction = "ShowMessageBox"
+        End If
+    End If
+    CellNameShapeCount = ActiveSheet.Shapes.Count
+
+
+    '-------------------------------------------------
+    ' Backward shapes (left side of the central shape)
+    '-------------------------------------------------
+    L = CenterLeft - (1.85 * ShapeWidth)
+    W = ShapeWidth
+    H = ShapeHeight
+    ArrowEndShape = L
+    
+    'Dim AddFactor As Integer 'if the chart abuts the top of the table, all the other elements are arranged below
+    '(this feature is replaced by an adaption of the shape size; if you have the problem, that the shapes stack on top of your table, you might activate the "AddFactor" lines and deactivate the corresponding line below)
+
+    For i = 0 To BackwardArraySize
+        
+        If i Mod 2 = 0 Then 'shapes are alternately arranged below and above the center
+            T = CenterTop - (i * 0.55 * ShapeHeight)
+            If T < 0 Then
+                'AddFactor = AddFactor + 2 'if the chart abuts the top of the table, all the other elements are arranged below
+                'T = CenterTop + ((i + AddFactor) * 0.55 * ShapeHeight) 'If the chart abuts the top of the table, all the other elements are arranged below
+                T = CenterTop + (i * 0.55 * ShapeHeight)
+            End If
+        Else
+            'T = CenterTop + ((i + 1 + AddFactor) * 0.55 * ShapeHeight) 'if the chart abuts the top of the table, all the other elements are arranged below
+            T = CenterTop + ((i + 1) * 0.55 * ShapeHeight)
+        End If
+        
+        ActiveSheet.Shapes.AddShape(msoShapeRoundedRectangle, L, T, W, H).Select
+        Selection.ShapeRange.Line.Visible = msoFalse
+        With Selection.ShapeRange.Fill
+            .ForeColor.RGB = RGB(0, 112, 192)
+        End With
+        With Selection.ShapeRange.TextFrame2
+            .TextRange.Characters.Text = Replace(BackwardArray(i), StringDelimiter, Chr(10))
+            .TextRange.Font.Size = FontSizeMax
+            .VerticalAnchor = msoAnchorMiddle
+            .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+            .WordWrap = True
+            .TextRange.Font.Fill.ForeColor.ObjectThemeColor = msoThemeColorBackground1
+            .AutoSize = msoAutoSizeShapeToFitText
+        End With
+        While ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height > H
+            Selection.ShapeRange.TextFrame2.TextRange.Font.Size = Selection.ShapeRange.TextFrame2.TextRange.Font.Size - 1
+        Wend
+        If ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height < H Then
+            ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Top = ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Top - ((H - ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height) * 0.5)
+            ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height = H
+        End If
+        If BackwardArrayRow(i) > 0 Then
+            Selection.OnAction = "'RENEW_CHART """ & Selection.Name & """'"
+        Else
+            Selection.ShapeRange.Fill.ForeColor.RGB = RGB(255, 0, 0)
+        End If
+        If firstCellName = BackwardArray(i) Then Selection.ShapeRange.Fill.ForeColor.RGB = RGB(25, 167, 28)
+
+
+        '-------------------------------------------------
+        ' Arrow from Backward to central shape
+        '-------------------------------------------------
+        ActiveSheet.Shapes.AddConnector(msoConnectorElbow, 10, 10, 10, 10).Select
+        Selection.ShapeRange.Line.EndArrowheadStyle = msoArrowheadTriangle
+        Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(CellNameShapeCount), 2
+        Selection.ShapeRange.ConnectorFormat.BeginConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 1), 4
+        With Selection.ShapeRange.Line
+            .Visible = msoTrue
+            .ForeColor.RGB = RGB(0, 0, 0)
+            .Weight = 200 / ActiveWindow.Zoom
+        End With
+    Next
+    
+
+    '-------------------------------------------------
+    ' Forward shapes (right side of the central shape)
+    '-------------------------------------------------
+    L = CenterLeft + 0.85 * ShapeWidth
+    W = ShapeWidth
+    H = ShapeHeight
+    ArrowStartShape = L + ShapeWidth
+    
+    'Dim AddFactor As Integer 'if the chart abuts the top of the table, all the other elements are arranged below
+    '(this feature is replaced by an adaption of the shape size; if you have the problem, that the shapes stack on top of your table, you might activate the "AddFactor" lines and deactivate the corresponding line below)
+
+    For i = 0 To ForwardArraySize
+        If i Mod 2 = 0 Then
+            T = CenterTop - (i * 0.55 * ShapeHeight)
+            If T < 0 Then
+                'AddFactor = AddFactor + 2 'if the chart abuts the top of the table, all the other elements are arranged below
+                'T = CenterTop + ((i + AddFactor) * 0.6 * ShapeHeight) 'if the chart abuts the top of the table, all the other elements are arranged below
+                T = CenterTop + ((i) * 0.55 * ShapeHeight)
+            End If
+        Else
+            'T = CenterTop + ((i + 1 + AddFactor) * 0.6 * ShapeHeight) 'if the chart abuts the top of the table, all the other elements are arranged below
+            T = CenterTop + ((i + 1) * 0.55 * ShapeHeight)
+        End If
+        
+        ActiveSheet.Shapes.AddShape(msoShapeRoundedRectangle, L, T, W, H).Select
+        Selection.ShapeRange.Line.Visible = msoFalse
+        With Selection.ShapeRange.Fill
+            .ForeColor.RGB = RGB(0, 112, 192)
+        End With
+        With Selection.ShapeRange.TextFrame2
+            .TextRange.Characters.Text = Replace(ForwardArray(i), StringDelimiter, Chr(10))
+            .TextRange.Font.Size = FontSizeMax
+            .VerticalAnchor = msoAnchorMiddle
+            .TextRange.ParagraphFormat.Alignment = msoAlignCenter
+            .WordWrap = True
+            .TextRange.Font.Fill.ForeColor.ObjectThemeColor = msoThemeColorBackground1
+            .AutoSize = msoAutoSizeShapeToFitText
+        End With
+        While ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height > H
+            Selection.ShapeRange.TextFrame2.TextRange.Font.Size = Selection.ShapeRange.TextFrame2.TextRange.Font.Size - 1
+        Wend
+        If ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height < H Then
+            ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Top = ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Top - ((H - ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height) * 0.5)
+            ActiveSheet.Shapes(ActiveSheet.Shapes.Count).Height = H
+        End If
+        If ForwardArrayRow(i) > 0 Then
+            Selection.OnAction = "'RENEW_CHART """ & Selection.Name & """'"
+        Else
+            Selection.ShapeRange.Fill.ForeColor.RGB = RGB(255, 0, 0)
+        End If
+        If firstCellName = ForwardArray(i) Then Selection.ShapeRange.Fill.ForeColor.RGB = RGB(25, 167, 28)
+        
+
+        '-------------------------------------------------
+        ' Arrow from central to Forward shape
+        '-------------------------------------------------
+        ActiveSheet.Shapes.AddConnector(msoConnectorElbow, 10, 10, 10, 10).Select
+        Selection.ShapeRange.Line.EndArrowheadStyle = msoArrowheadTriangle
+        Selection.ShapeRange.ConnectorFormat.BeginConnect ActiveSheet.Shapes(CellNameShapeCount), 4
+        Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 1), 2
+        With Selection.ShapeRange.Line
+            .Visible = msoTrue
+            .ForeColor.RGB = RGB(0, 0, 0)
+            .Weight = 200 / ActiveWindow.Zoom
+        End With
+        
+    Next
+
+
+
+'-------------------------------------------------
+' Create the arrows starting at the Forward shapes
+'-------------------------------------------------
+Dim ArrowCount As Integer 'actually processed arrow (starting at '0' up to ArrowSum)
+Dim ArrowSum As Integer 'sum of all arrows starting at the right side ending at a shape left of them (no auto-routing possible)
+Dim HitB() As Integer, HitF() As Integer 'if BackBackArray(x) = ForwardArray(y) Then HitB=x & HitF=y
+Dim HitSize As Integer 'size of the HitB & HitF arrays
+Dim ArrowWidth As Single, ArrowHeight As Single 'space between two arrows vertically (width) and horizontally (height)
+Dim ArrowTopOffset As Single 'top offset of the deepest shape element (Backward or Forward shape deepness)
+Dim ArrowColor As Long 'stores the determined arrow color and uses it for all parts of the arrow; for high amount of colors the random color could be choosen in COLOR_SELECTION function
+
+
+HitSize = -1
+
+
+    '-------------------------------------------------
+    ' Preliminary
+    '-------------------------------------------------
+    'sum of all needed connections = sum of arrows to create
+    For i = 0 To BackBackArraySize
+        For j = 0 To ForwardArraySize
+            If BackBackArray(i) = ForwardArray(j) Then
+                HitSize = HitSize + 1
+                ReDim Preserve HitB(HitSize + 1)
+                ReDim Preserve HitF(HitSize + 1)
+                
+                HitB(HitSize) = i
+                HitF(HitSize) = j
+            End If
+        Next j
+    Next i
+    If ForwardDirectSize >= 0 Then
+        ArrowSum = ForwardDirectSize
+    End If
+    If HitSize >= 0 Then
+        ArrowSum = ArrowSum + HitSize
+        If ForwardDirectSize >= 0 Then 'increments the ArrowSum, if ForwardDirectSize AND HitSize contains elements (because both arrows have the entry '0' that is not counted by the sum)
+            ArrowSum = ArrowSum + 1
+        End If
+    End If
+
+    
+    'previously set variables (see shape creation):
+        'ArrowStartShape = L + ShapeWidth 'beginning width at the right shape
+        'ArrowEndShape = L 'ending width at the left shape
+        'ArrowMaxHeight 'ending point of the background shape (vertical maximum)
+        'ArrowMaxWidth 'ending point of the background shape (horizontal maximum)
+    
+    
+    'height of the deepest shape (Backward oder Forward shape)
+    If BackwardArraySize >= ForwardArraySize Then
+        If BackwardArraySize Mod 2 = 0 Then
+            If BackwardArraySize = 0 Then
+                ArrowTopOffset = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackwardArraySize * 2).Top + ShapeHeight
+            Else
+                ArrowTopOffset = ActiveSheet.Shapes(CellNameShapeCount - 1 + BackwardArraySize * 2).Top + ShapeHeight
+            End If
+        Else
+            ArrowTopOffset = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackwardArraySize * 2).Top + ShapeHeight
+        End If
+    Else
+        If ForwardArraySize Mod 2 = 0 Then
+            If ForwardArraySize = 0 Then
+                ArrowTopOffset = ActiveSheet.Shapes(CellNameShapeCount + 3 + BackwardArraySize * 2 + ForwardArraySize * 2).Top + ShapeHeight
+            Else
+                ArrowTopOffset = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackwardArraySize * 2 + ForwardArraySize * 2).Top + ShapeHeight
+            End If
+        Else
+            ArrowTopOffset = ActiveSheet.Shapes(CellNameShapeCount + 3 + BackwardArraySize * 2 + ForwardArraySize * 2).Top + ShapeHeight
+        End If
+    End If
+    'maximum usable width for each arrow (vertical space between two nearest arrows)
+    ArrowWidth = (ArrowMaxWidth - ArrowStartShape) / (ArrowSum + 2)
+        If ArrowWidth > 0.1 * ShapeWidth Then ArrowWidth = 0.1 * ShapeWidth 'reduce the width, if a lot of space is available (better view)
+    'maximum usable heigth for each arrow (horizontal space between two nearest arrows)
+    ArrowHeight = (ArrowMaxHeight - ArrowTopOffset) / (ArrowSum + 2)
+        If ArrowHeight > 0.2 * ShapeHeight Then ArrowHeight = 0.2 * ShapeHeight 'reduce the height, if a lot of space is available
+
+
+    '-------------------------------------------------
+    ' Creating the different parts of the arrows
+    '-------------------------------------------------
+    If (ForwardDirectSize >= 0) Or (HitSize >= 0) Then 'TRUE if there are backward arrows
+        For ArrowCount = 0 To ArrowSum
+            'gets the color of the next arrow
+            ArrowColor = COLOR_SELECTION(ArrowCount)
+            
+            
+            'starting shape -> 1. connector (right top)
+            L = ArrowStartShape
+            'T
+            W = L + ArrowWidth * (ArrowCount + 1)
+            H = T
+            If ArrowCount <= ForwardDirectSize Then
+                T = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackwardArraySize * 2 + ForwardDirect(ArrowCount) * 2 + 2).Top + ShapeHeight * (ArrowCount + 1) / (ArrowSum + 2)
+            Else
+                T = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackwardArraySize * 2 + HitF(ArrowCount - ForwardDirectSize - 1) * 2 + 2).Top + ShapeHeight * (ArrowCount + 1) / (ArrowSum + 2)
+            End If
+            ActiveSheet.Shapes.AddShape(msoShapeFlowchartConnector, W, T, 10, 10).Select
+            With Selection.ShapeRange
+                .Visible = msoFalse
+                .ScaleWidth 0.1, msoFalse, msoScaleFromTopLeft
+                .ScaleHeight 0.1, msoFalse, msoScaleFromTopLeft
+            End With
+            ActiveSheet.Shapes.AddConnector(msoConnectorStraight, L, T, 10, 10).Select
+            Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 1), 1
+            With Selection.ShapeRange.Line
+                .Visible = msoTrue
+                .Weight = 200 / ActiveWindow.Zoom
+                .ForeColor.RGB = ArrowColor
+            End With
+            
+            
+            '1. connector -> 2. connector (right bottom)
+            'L = ArrowStartShape
+            T = ArrowTopOffset + ArrowHeight * (ArrowCount + 1)
+            'W = L + ArrowWidth * (ArrowCount + 1)
+            'H = T
+            ActiveSheet.Shapes.AddShape(msoShapeFlowchartConnector, W, T, 10, 10).Select
+            With Selection.ShapeRange
+                .Visible = msoFalse
+                .ScaleWidth 0.1, msoFalse, msoScaleFromTopLeft
+                .ScaleHeight 0.1, msoFalse, msoScaleFromTopLeft
+            End With
+            ActiveSheet.Shapes.AddConnector(msoConnectorStraight, 10, 10, 10, 10).Select
+            Selection.ShapeRange.ConnectorFormat.BeginConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 3), 4
+            Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 1), 5
+            With Selection.ShapeRange.Line
+                .Weight = 200 / ActiveWindow.Zoom
+                .ForeColor.RGB = ArrowColor
+            End With
+            
+            
+            '2. connector -> 3. connector (left bottom OR left central)
+            If ArrowCount <= ForwardDirectSize Then
+                L = CenterLeft + ArrowWidth * ArrowCount
+            Else
+                L = ArrowEndShape - ArrowWidth * (ArrowCount + 1)
+            End If
+            'T = ArrowTopOffset + ArrowHeight * (ArrowCount + 1)
+            'W = L + ArrowWidth * (ArrowCount + 1)
+            'H = T
+            ActiveSheet.Shapes.AddShape(msoShapeFlowchartConnector, L, T, 10, 10).Select
+            With Selection.ShapeRange
+                .Visible = msoFalse
+                .ScaleWidth 0.1, msoFalse, msoScaleFromTopLeft
+                .ScaleHeight 0.1, msoFalse, msoScaleFromTopLeft
+            End With
+            ActiveSheet.Shapes.AddConnector(msoConnectorStraight, 10, 10, 10, 10).Select
+            Selection.ShapeRange.ConnectorFormat.BeginConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 3), 7
+            Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 1), 3
+            With Selection.ShapeRange.Line
+                .Weight = 200 / ActiveWindow.Zoom
+                .ForeColor.RGB = ArrowColor
+            End With
+            
+            
+            '3. connector -> 4. connector (left bottom -> left top; not needed for central arrows)
+            'L = ArrowStartShape
+            'T = ArrowTopOffset + ArrowHeight * (ArrowCount + 1)
+            'W = L + ArrowWidth * (ArrowCount + 1)
+            'H = T
+            If ArrowCount > ForwardDirectSize Then
+                T = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackBackArrayReference(HitB(ArrowCount - ForwardDirectSize - 1)) * 2).Top + ShapeHeight * (ArrowCount - ForwardDirectSize) / (ArrowSum + 1 - ForwardDirectSize)
+
+                ActiveSheet.Shapes.AddShape(msoShapeFlowchartConnector, L, T, 10, 10).Select
+                With Selection.ShapeRange
+                    .Visible = msoFalse
+                    .ScaleWidth 0.1, msoFalse, msoScaleFromTopLeft
+                    .ScaleHeight 0.1, msoFalse, msoScaleFromTopLeft
+                End With
+                ActiveSheet.Shapes.AddConnector(msoConnectorStraight, 10, 10, 10, 10).Select
+                Selection.ShapeRange.ConnectorFormat.BeginConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 3), 5
+                Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 1), 1
+                With Selection.ShapeRange.Line
+                    .Weight = 200 / ActiveWindow.Zoom
+                    .ForeColor.RGB = ArrowColor
+                End With
+            End If
+            
+                        
+            'ending part: 3. connector (central shape) oder 4. connector (Backward shape) to corresponding ending
+            'L = ArrowStartShape
+            'T = ArrowTopOffset + ArrowHeight * (ArrowCount + 1)
+            'W = L + ArrowWidth * (ArrowCount + 1)
+            'H = T
+            If ArrowCount <= ForwardDirectSize Then
+                T = CenterTop + ShapeHeight
+                ActiveSheet.Shapes.AddConnector(msoConnectorStraight, L, T, 10, 10).Select
+                Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 2), 5
+            Else
+                L = ActiveSheet.Shapes(CellNameShapeCount + 1 + BackBackArrayReference(HitB(ArrowCount - ForwardDirectSize)) * 2).Left
+                ActiveSheet.Shapes.AddConnector(msoConnectorStraight, L, T, 10, 10).Select
+                Selection.ShapeRange.ConnectorFormat.EndConnect ActiveSheet.Shapes(ActiveSheet.Shapes.Count - 2), 1
+            End If
+            With Selection.ShapeRange.Line
+                .BeginArrowheadStyle = msoArrowheadOpen
+                .Weight = 200 / ActiveWindow.Zoom
+                .ForeColor.RGB = ArrowColor
+            End With
+            
+            
+            'group the single arrow parts (so they appear as one arrow)
+            If ArrowCount <= ForwardDirectSize Then
+                ActiveSheet.Shapes.Range(Array(ActiveSheet.Shapes.Count, ActiveSheet.Shapes.Count - 1, ActiveSheet.Shapes.Count - 3, ActiveSheet.Shapes.Count - 5)).Select
+                Selection.Group.Select
+            Else
+                ActiveSheet.Shapes.Range(Array(ActiveSheet.Shapes.Count, ActiveSheet.Shapes.Count - 1, ActiveSheet.Shapes.Count - 3, ActiveSheet.Shapes.Count - 5, ActiveSheet.Shapes.Count - 7)).Select
+                Selection.Group.Select
+            End If
+            Selection.OnAction = "'HighlightArrow """ & Selection.Name & """'"
+            
+
+        Next
+    End If
+    
+
+
+    'myActiveWorkbook.Activate
+    'myActiveWorksheet.Activate
+    myActiveCell.Activate
+
+
+'reactivate Excel update functions
+Application.Calculation = xlCalculationAutomatic
+Application.ScreenUpdating = True
+Application.DisplayStatusBar = True
+Application.EnableEvents = True
+ActiveSheet.DisplayPageBreaks = True
+
+
+End Sub
+
+
+
+
+
+
+
+
+
+'-------------------------------------------------
+' Additional functions
+'-------------------------------------------------
+'cause a renewal of the chart when clicking on a Forward or Backward shape
+Sub RENEW_CHART(ButtonID As String)
+
+    Application.Calculation = xlCalculationManual
+    'Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    ActiveSheet.DisplayPageBreaks = False
+    
+    'Set myActiveCell2 = ActiveCell
+    LastColor = 0
+    
+    nam = Replace(ActiveSheet.Shapes(ButtonID).TextFrame2.TextRange.Characters.Text, Chr(10), StringDelimiter)
+    For i = 0 To UBound(CellArray)
+        If CellArray(i) = nam Then
+            ActiveSheet.Cells(i, ElementColumnAdr).Select
+            Call CREATE_CHART
+            Exit For
+        End If
+    Next
+
+    
+    'myActiveCell2.Activate
+End Sub
+
+
+'select one of 7 colors for the arrow connections. (Can either repeat a pattern of 7 colors or get a random color if there are more than 7 colors needed.)
+Function COLOR_SELECTION(acount As Integer) As Long
+    
+    Select Case acount Mod 7 'use this to repeat the pattern of 7 arrow colors
+    'Select Case acount 'use this if you want to create a random color if 7 are not enough
+        Case 0 'blue
+            COLOR_SELECTION = RGB(0, 0, 255)
+        Case 1 'red
+            COLOR_SELECTION = RGB(255, 0, 0)
+            'Selection.ShapeRange.Line.DashStyle = msoLineSysDot
+        Case 2 'green
+            COLOR_SELECTION = RGB(70, 200, 0)
+            'Selection.ShapeRange.Line.DashStyle = msoLineSysDash
+        Case 3 'pink
+            COLOR_SELECTION = RGB(255, 0, 255)
+            'Selection.ShapeRange.Line.DashStyle = msoLineDashDot
+        Case 4 'light blue
+            COLOR_SELECTION = RGB(0, 200, 255)
+            'Selection.ShapeRange.Line.DashStyle = msoLineLongDash
+        Case 5 'purple
+            COLOR_SELECTION = RGB(162, 14, 228)
+            'Selection.ShapeRange.Line.DashStyle = msoLineDashDot
+        Case 6 'brown
+            COLOR_SELECTION = RGB(140, 95, 14)
+            'Selection.ShapeRange.Line.DashStyle = msoLineLongDashDotDot
+        Case Else
+            COLOR_SELECTION = RGB(255 * Rnd, 255 * Rnd, 255 * Rnd) 'random color
+            'Selection.ShapeRange.Line.DashStyle = msoLineDash
+        End Select
+
+End Function
+
+
+'show a message if there is no valid link in link column (Using the sub prevent the macro from showing the message on every creation of the central shape)
+Private Sub ShowMessageBox()
+    MsgBox ("No valid link found. 'Notice 104'")
+End Sub
+
+
+'highlight an arrow when it is marked
+Sub HighlightArrow(ShapeID As String)
+    
+    'stop any Excel update to speed up makro execution time
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    ActiveSheet.DisplayPageBreaks = False
+    
+    Set myActiveCell = ActiveCell
+    
+    If LastColor <> 0 Then
+        ActiveSheet.Shapes.Range(LastArrowGroup).Select
+        With Selection.ShapeRange.Line
+            .ForeColor.RGB = LastColor
+            .Weight = 200 / ActiveWindow.Zoom
+        End With
+    End If
+    
+    'paint a clicked arrow in black and remove the effect when clicked again
+    If ShapeID <> LastArrowGroup Then 'TRUE if arrow was NOT clicked again
+        LastArrowGroup = ShapeID
+        ActiveSheet.Shapes.Range(ShapeID).Select
+        LastColor = Selection.ShapeRange.Line.ForeColor.RGB
+        
+        'color the arrow in black and increase arrow line thickness
+        With Selection.ShapeRange.Line
+            .ForeColor.RGB = RGB(0, 0, 0)
+            .Weight = 350 / ActiveWindow.Zoom
+        End With
+    Else
+        LastColor = 0
+        LastArrowGroup = ""
+    End If
+    
+    myActiveCell.Activate
+    ShapeID = ""
+    
+    'reactivate Excel update functions
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    ActiveSheet.DisplayPageBreaks = True
+    
+End Sub
