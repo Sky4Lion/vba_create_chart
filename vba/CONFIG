@@ -25,7 +25,7 @@ Public LinkSequel As String 'put this after the content in the link column
 Sub CONFIG()
 '# Debug
 '# Set this to change the behavior of the macro in case an error occures. (for DEBUG)
-DebugHandler = 1 '[0] just continue (ignore); [1] show warnings (notice); [2] show warning and also terminate macro execution (react) in case its a critical error (would probably else result in a vba crash)
+DebugHandler = 1 '# [0] just continue (ignore); [1] show warnings (notice); [2] show warning and also terminate macro execution (react) in case its a critical error (would probably else result in a vba crash)
 
 
 
@@ -47,7 +47,7 @@ LastRow = 0 '# indicates the last row that will be processed by the macro
         Case "any" '# any other worksheet you want to add exceptions for
             'StartingRow = 2
         Case Else
-            StartingRow = 2 '# you may not have buttons in the second row but probably headers in the first
+            StartingRow = 3 '# you may not have buttons in the second row but probably headers in the first
     End Select
         
 
@@ -55,8 +55,9 @@ LastRow = 0 '# indicates the last row that will be processed by the macro
 '# NOTICE: The delimiter can be put in front of a dependency string to link it to another section; (e.g. for '$' as a delimiter: section$dependency)
 StringDelimiter = "$"
 
+
 '# Maximum Text Size in Shapes (is automatically reduced if letters would else be hidden)
-FontSizeMax = 25
+FontSizeMax = 25 '# increase this value if you often use low Excel zoom levels and need to increase the text size inside the shapes
 
 
 '# Processed Columns
@@ -78,11 +79,11 @@ LinkSequel = "" '# put this after the content in link column
 
 
 '# Delete all previous objects when creating a new chart [like shapes or buttons]
-DeleteAllObjects = True
+DeleteAllObjects = True '# True for deleting the objects
 
 
 '# Maximize Excel window for better view
-MaximizeOn = True '# it is NOT recommended deactivating this (I have never tried non maximized window sizes)
+MaximizeOn = True '# it is NOT recommended deactivating this (I have never tested non maximized window sizes)
 
 
 
