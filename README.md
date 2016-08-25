@@ -1,11 +1,11 @@
 # Excel VBA to create a comprehensible Chart based on your Data
 The project provides an Excel VBA macro to create a chart with data extracted from Excel worksheets.
-![Excel Chart](https://github.com/Sky4Lion/vba_create_chart/blob/master/demo/Demo.png)
+![Demo Picture](https://github.com/Sky4Lion/vba_create_chart/blob/master/doc/pictures/Demo.png)
 
 ## Presentation - Functionality
 Within the demo folder you can download an Excel demo document that can help understanding the functionality and the ability of the macro.
 The Excel document needs to match the following structure:
-![Excel Chart](https://github.com/Sky4Lion/vba_create_chart/blob/master/demo/Structure.png)
+![Data Structure](https://github.com/Sky4Lion/vba_create_chart/blob/master/doc/pictures/Structure.png)
 ####Element (required):
 The element is non optional and needs to be declared for every row in the worksheet. The element could be any data like e.g. the name of an employee (or a task, a software module, …).
 ####Section (optional):
