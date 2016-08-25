@@ -12,7 +12,7 @@ Dim LastWks As Worksheet
 
     'create buttons and user info in second line
     MainWS.Select
-    Call CREATE_BUTTONS
+    Call CREATE_BUTTONS(True)
     
     'event-handler for double click detection
     Call DOUBLE_CLICK_EVENT
@@ -27,36 +27,8 @@ Dim LastWks As Worksheet
 End Sub
 
 
-'clear previous content
-Sub ClearSheet()
-
-    Set myActiveCell = ActiveCell
-    
-    'delete all shapes (any object)
-    ActiveSheet.DrawingObjects.Delete
-
-    'restores buttons
-    If ActiveSheet.Name = MainWS.Name Then
-        Call Auto_Open
-    End If
-
-'    'delete defined names
-'    Dim xName As Name
-'    For Each xName In ActiveWorkbook.Names
-'        If InStr(1, xName, ActiveSheet.Name) Then
-'            xName.Delete
-'        End If
-'    Next xName
-
-    'clears first assigend cell calling the function
-    firstCell = False
-    
-    myActiveCell.Activate
-End Sub
-
-
 'create buttons and user info in second line
-Sub CREATE_BUTTONS()
+Sub CREATE_BUTTONS(AnyVariable As Boolean)
     'last editor and change date
     'MainWS.Select
     Range("C2").Value = Application.UserName
