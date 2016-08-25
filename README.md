@@ -1,11 +1,11 @@
 # Excel VBA to create a comprehensible Chart based on your Data
 The project provides an Excel VBA macro to create a chart with data extracted from Excel worksheets.
-![Excel Chart](https://github.com/Sky4Lion/vba_create_chart/blob/master/demo/Demo.png)
+![Excel Chart]( https://github.com/Sky4Lion/vba_create_chart/blob/master/doc/pictures/Demo.png)
 
 ## Presentation - Functionality
 Within the demo folder you can download an Excel demo document that can help understanding the functionality and the ability of the macro.
 The Excel document needs to match the following structure:
-![Excel Chart](https://github.com/Sky4Lion/vba_create_chart/blob/master/demo/Structure.png)
+![Excel Chart]( https://github.com/Sky4Lion/vba_create_chart/blob/master/doc/pictures/Structure.png)
 #### Element (required)
 The element is non optional and needs to be declared for every row in the worksheet. The element could be any data like e.g. the name of an employee (or a task, a software module, …).
 #### Section (optional)
@@ -15,7 +15,6 @@ If your elements are not unique itself, you can use the optional section to buil
 Your element might depend on other elements (or sub elements). The chart will show these dependencies and also searches for other elements that depend on the considered one. If there is some direct interference between different elements, the chart will show this as arrows between the elements. Taking my example, the employee could depend on its team or some equipment (or depending tasks, software sub modules / functions, …).
 #### key (build)
 The keys are created by combining the optional section, a selectable delimiter (see CONFIG) and the element. The key should be unique, because in case it is not, the macro will only consider the first matching key, ignoring every other match.
-
 
 ## Installation
 By just inserting the 3 vba code files into one (or more) macro modules of your Excel document, you can use the macro. Please save, close and reopen your Excel document afterwards to let the auto start macro do its job.
