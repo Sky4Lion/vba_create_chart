@@ -63,7 +63,7 @@ Sub CREATE_BUTTONS()
     Range("C2").HorizontalAlignment = xlLeft
     Range("C2").Font.Bold = True
     Range("C2").Font.Size = 12
-    Range("D2").Value = Strings.Format(Now, "DD.MM.YYYY") & " um " & Strings.Format(Now, "hh:mm") & " Uhr"
+    Range("D2").Value = Strings.Format(Now, "DD.MM.YYYY") & " at " & Strings.Format(Now, "hh:mm")
     Range("D2").HorizontalAlignment = xlLeft
     Range("D2").Font.Bold = True
     Range("D2").Font.Size = 12
