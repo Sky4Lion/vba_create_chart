@@ -127,7 +127,7 @@ Set myActiveCell = ActiveCell 'remember the actual location BEFORE executing the
     
     
     'restore buttons and update user info in the second line
-    Call CREATE_BUTTONS
+    Call CREATE_BUTTONS(True)
 
 
 
@@ -446,7 +446,7 @@ Dim ArrowMaxWidth As Single 'maximum width, while the arrows are still on top of
         Selection.ShapeRange.TextFrame2.TextRange.Font.Size = Selection.ShapeRange.TextFrame2.TextRange.Font.Size - 1 'reduce the letter size till the shape size (that is automatically adapted by Excel) fits the maximum allowed shape dimensions
     Wend
     Selection.ShapeRange.Line.Visible = msoFalse 'hide the border line (would else have to be configured too)
-    Selection.OnAction = "'" & ActiveWorkbook.Name & "'!ClearSheet" 'on click action calls the macro when clicked by user
+    Selection.OnAction = "'" & ActiveWorkbook.Name & "'!CLEAR_SHEET" 'on click action calls the macro when clicked by user
 
     
     '-------------------------------------------------
@@ -489,7 +489,7 @@ Dim ArrowMaxWidth As Single 'maximum width, while the arrows are still on top of
         End If
     Else
         If DebugHandler > 0 Then
-            Selection.OnAction = "ShowMessageBox"
+            Selection.OnAction = "SHOW_MESSAGEBOX"
         End If
     End If
     CellNameShapeCount = ActiveSheet.Shapes.Count
@@ -844,7 +844,7 @@ HitSize = -1
                 ActiveSheet.Shapes.Range(Array(ActiveSheet.Shapes.Count, ActiveSheet.Shapes.Count - 1, ActiveSheet.Shapes.Count - 3, ActiveSheet.Shapes.Count - 5, ActiveSheet.Shapes.Count - 7)).Select
                 Selection.Group.Select
             End If
-            Selection.OnAction = "'HighlightArrow """ & Selection.Name & """'"
+            Selection.OnAction = "'HIGHLIGHT_ARROW """ & Selection.Name & """'"
             
 
         Next
@@ -898,8 +898,35 @@ Sub RENEW_CHART(ButtonID As String)
         End If
     Next
 
-    
     'myActiveCell2.Activate
+End Sub
+
+
+'clear previous content
+Private Sub CLEAR_SHEET()
+
+    Set myActiveCell = ActiveCell
+    
+    'delete all shapes (any object)
+    ActiveSheet.DrawingObjects.Delete
+
+    'restores buttons
+    If ActiveSheet.Name = MainWS.Name Then
+        Call Auto_Open
+    End If
+
+'    'delete defined names
+'    Dim xName As Name
+'    For Each xName In ActiveWorkbook.Names
+'        If InStr(1, xName, ActiveSheet.Name) Then
+'            xName.Delete
+'        End If
+'    Next xName
+
+    'clears first assigend cell calling the function
+    firstCell = False
+    
+    myActiveCell.Activate
 End Sub
 
 
@@ -937,13 +964,13 @@ End Function
 
 
 'show a message if there is no valid link in link column (Using the sub prevent the macro from showing the message on every creation of the central shape)
-Private Sub ShowMessageBox()
+Private Sub SHOW_MESSAGEBOX()
     MsgBox ("No valid link found. 'Notice 104'")
 End Sub
 
 
 'highlight an arrow when it is marked
-Sub HighlightArrow(ShapeID As String)
+Sub HIGHLIGHT_ARROW(ShapeID As String)
     
     'stop any Excel update to speed up makro execution time
     Application.Calculation = xlCalculationManual
