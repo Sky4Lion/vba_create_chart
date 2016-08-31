@@ -215,7 +215,7 @@ Dim nam As String 'temporary storage for a string comparison with the CellName v
 
                 'build the BackwardArray and assign the row index to the found Backward elements; the first hit is assigned, thats why the combination of section and element must be unique
                 For n = 0 To totalvals
-                    If InStr(splitVals(n), SectionSearchString) <> 0 Then 'True if dependency has a different section than the actual processed element
+                    If InStr(splitVals(n), StringDelimiter) <> 0 Then 'True if dependency has a different section than the actual processed element
                         BackwardArray(n) = splitVals(n)
                     Else
                         BackwardArray(n) = SectionArray(i) & StringDelimiter & splitVals(n)
@@ -232,7 +232,7 @@ Dim nam As String 'temporary storage for a string comparison with the CellName v
 
             'search for forward dependencies
             For n = 0 To totalvals
-                If InStr(splitVals(n), SectionSearchString) <> 0 Then 'True if dependency has a different section than the actual processed element
+                If InStr(splitVals(n), StringDelimiter) <> 0 Then 'True if dependency has a different section than the actual processed element
                     nam = splitVals(n)
                 Else
                     nam = SectionArray(i) & StringDelimiter & splitVals(n)
@@ -333,7 +333,7 @@ Dim nam As String 'temporary storage for a string comparison with the CellName v
     
                     'store the found elements
                     For j = 0 To totalvals
-                        If InStr(splitVals(j), SectionSearchString) <> 0 Then 'True if dependency has a different section than the actual processed element
+                        If InStr(splitVals(j), StringDelimiter) <> 0 Then 'True if dependency has a different section than the actual processed element
                             BackBackArray(BackBackArraySize + j) = splitVals(j)
                         Else
                             BackBackArray(BackBackArraySize + j) = SectionArray(i) & StringDelimiter & splitVals(j)
