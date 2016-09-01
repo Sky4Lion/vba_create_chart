@@ -889,14 +889,19 @@ Sub RENEW_CHART(ButtonID As String)
     'Set myActiveCell2 = ActiveCell
     LastColor = 0
     
-    nam = Replace(ActiveSheet.Shapes(ButtonID).TextFrame2.TextRange.Characters.Text, Chr(10), StringDelimiter)
-    For i = 0 To UBound(CellArray)
-        If CellArray(i) = nam Then
-            ActiveSheet.Cells(i, ElementColumnAdr).Select
-            Call CREATE_CHART
-            Exit For
-        End If
-    Next
+    If firstCell Then 'prevent an error when document is opened with an existing chart
+        nam = Replace(ActiveSheet.Shapes(ButtonID).TextFrame2.TextRange.Characters.Text, Chr(10), StringDelimiter)
+        For i = 0 To UBound(CellArray)
+            If CellArray(i) = nam Then
+                ActiveSheet.Cells(i, ElementColumnAdr).Select
+                Call CREATE_CHART
+                Exit For
+            End If
+        Next
+    Else
+        MsgBox ("Macro cannot be used on charts already opened during startup." & Chr(10) & "Please close the chart and create it again to let the macro do its magic.")
+        If DebugHandler > 1 Then ActiveSheet.DrawingObjects.Delete
+    End If
 
     'myActiveCell2.Activate
 End Sub
